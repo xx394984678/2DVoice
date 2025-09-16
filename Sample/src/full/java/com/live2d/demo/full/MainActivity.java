@@ -23,6 +23,7 @@ import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 
@@ -124,10 +125,11 @@ public class MainActivity extends Activity {
 
 
         Button autoSpeak = new Button(this);
-        autoSpeak.setText("托管");
+        autoSpeak.setText("打开自动聊天");
         autoSpeak.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                Toast.makeText(MainActivity.this,"托管成功",Toast.LENGTH_LONG).show();
                 rtcManager.setAutoSpeak(true);
             }
         });
@@ -236,9 +238,6 @@ public class MainActivity extends Activity {
         rtcManager.createRtc(this);
         rtcManager.createRoom();
 
-
-
-        rtcManager.speak("你好呀，第一次见面");
     }
 
     @Override
