@@ -232,8 +232,8 @@ class RtcManager(val context:Context,private val rtcListener: RtcListener) {
 
                         if(isAutoSpeak){
                             askQuestionToAI("111",stringBuilder.toString())
+                            stringBuilder.clear()
                         }
-                        stringBuilder.clear()
 
                     } else {
                         Log.d(TAG, "parseData: ${subtitleEntity.text}")
@@ -635,6 +635,13 @@ class RtcManager(val context:Context,private val rtcListener: RtcListener) {
 
     /** 是否要托管播放 **/
     var isAutoSpeak = false
+        set(value) {
+            if(value){
+                askQuestionToAI("111",stringBuilder.toString())
+                stringBuilder.clear()
+                field = value
+            }
+        }
 
 
     /**
