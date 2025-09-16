@@ -78,8 +78,19 @@ public class MainActivity extends Activity {
         frameLayout.addView(speakText, lp);
 
 
+        Button deletePcm = new Button(this);
+        deletePcm.setText("删除本地pcm");
+        deletePcm.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                rtcManager.deletePcm();
+            }
+        });
+        linearLayout.addView(deletePcm, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT));
+
+
         Button playPcmBtn = new Button(this);
-        playPcmBtn.setText("眨眼");
+        playPcmBtn.setText("播放存储好的pcm");
         playPcmBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -87,6 +98,18 @@ public class MainActivity extends Activity {
             }
         });
         linearLayout.addView(playPcmBtn, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT));
+
+
+        Button talkBtn = new Button(this);
+        talkBtn.setText("托管");
+        talkBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                rtcManager.uploadAndTalk();
+            }
+        });
+        linearLayout.addView(talkBtn, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT));
+
 
         Button leaveRoom = new Button(this);
         leaveRoom.setText("离开房间");

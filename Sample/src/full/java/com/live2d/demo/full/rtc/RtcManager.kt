@@ -7,14 +7,16 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import com.google.gson.Gson
-import com.live2d.demo.full.audio.AudioPlayer
 import com.live2d.demo.full.audio.PCMAudioPlayer
+import com.live2d.demo.full.audio.WavUtils
 import com.live2d.demo.full.entity.CreateRoomEntity
 import com.live2d.demo.full.entity.JoinRoom
 import com.live2d.demo.full.entity.SubtitleMsgData
 import com.live2d.demo.full.entity.SubtitleWrapEntity
+import com.live2d.demo.full.entity.VoiceTrainStatusEntity
 import com.ss.bytertc.engine.IAudioFrameProcessor
 import com.ss.bytertc.engine.RTCRoom
 import com.ss.bytertc.engine.RTCRoomConfig
@@ -32,6 +34,10 @@ import com.ss.bytertc.engine.handler.IRTCVideoEventHandler
 import com.ss.bytertc.engine.type.ChannelProfile
 import com.ss.bytertc.engine.type.MediaStreamType
 import com.ss.bytertc.engine.utils.IAudioFrame
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
+import okhttp3.ResponseBody
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -39,6 +45,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
+import java.util.HashMap
 import kotlin.random.Random
 
 class RtcManager(val context:Context,private val rtcListener: RtcListener) {
@@ -385,7 +392,7 @@ class RtcManager(val context:Context,private val rtcListener: RtcListener) {
          */
         //设置并开启指定的音频帧回调，进行自定义处理。
 //        rtcVideo.enableAudioProcessor(AudioProcessorMethod.AUDIO_FRAME_PROCESSOR_REMOTE_USER, com.ss.bytertc.engine.data.AudioFormat(AudioSampleRate.AUDIO_SAMPLE_RATE_16000, AudioChannel.AUDIO_CHANNEL_MONO, 1280)) // 10ms 320))
-        rtcVideo.enableAudioProcessor(AudioProcessorMethod.AUDIO_FRAME_PROCESSOR_RECORD, AudioFormat(AudioSampleRate.AUDIO_SAMPLE_RATE_16000, AudioChannel.AUDIO_CHANNEL_MONO, 1280)) // 10ms 320))
+        rtcVideo.enableAudioProcessor(AudioProcessorMethod.AUDIO_FRAME_PROCESSOR_RECORD, AudioFormat(AudioSampleRate.AUDIO_SAMPLE_RATE_32000, AudioChannel.AUDIO_CHANNEL_MONO, 1280)) // 10ms 320))
 //        rtcVideo.setPlaybackVolume(0)
     }
 
@@ -401,6 +408,9 @@ class RtcManager(val context:Context,private val rtcListener: RtcListener) {
 
     var fileOutPutStream :FileOutputStream? = null
     val pcmName: String = "user_recoder.pcm"
+
+    var recordedTime = 0
+    var cacheTime = 0L
     private fun startRecording(){
         //判定一下存储
         if (ContextCompat.checkSelfPermission(context,
@@ -412,6 +422,13 @@ class RtcManager(val context:Context,private val rtcListener: RtcListener) {
         if (fileOutPutStream != null) {
             return
         }
+        if (recordedTime >= 10) {
+            Log.d(TAG, "已经有了足够的10S")
+            return
+        }
+        val currentTime = System.currentTimeMillis()
+        cacheTime = currentTime
+
         Log.d(TAG, "startRecording: ")
         val cacheDir: File = context.getExternalCacheDir()?:return
         val finalFileDir = File(cacheDir.absolutePath + File.separator + "recorder")
@@ -430,7 +447,14 @@ class RtcManager(val context:Context,private val rtcListener: RtcListener) {
         if (fileOutPutStream == null) {
             return
         }
-        Log.d(TAG, "pushPcm: ")
+        val currentTime = System.currentTimeMillis()
+        val hasRecordTime = (currentTime - cacheTime)/1000 + recordedTime
+        Log.d(TAG, "pushPcm: ${hasRecordTime}")
+        if (hasRecordTime >= 10) {
+            stopPush()
+            return
+        }
+
         fileOutPutStream?.write(buffer)
     }
     
@@ -438,10 +462,12 @@ class RtcManager(val context:Context,private val rtcListener: RtcListener) {
         if (fileOutPutStream == null) {
             return
         }
-        Log.d(TAG, "stopPush: ")
         fileOutPutStream?.close()
         fileOutPutStream = null
-        
+        val currentTime = System.currentTimeMillis()
+        recordedTime = ((currentTime - cacheTime)/1000 + recordedTime).toInt()
+        Log.d(TAG, "stopPush: ${recordedTime}")
+
     }
 
     private var audioPlayer:PCMAudioPlayer? = null
@@ -454,6 +480,12 @@ class RtcManager(val context:Context,private val rtcListener: RtcListener) {
             val cacheDir: File = context.getExternalCacheDir()?:return@Thread
             val finalFileDir = File(cacheDir.absolutePath + File.separator + "recorder")
             val pcmFile = File(finalFileDir, pcmName)
+
+            ////////////////转换
+            WavUtils.convertPcmToWav(pcmFile.absolutePath,finalFileDir.absolutePath+File.separator+"out_file.wav",32000,1,16)
+
+            ////////////////
+
             val inputStream = FileInputStream(pcmFile)
             val buffer = ByteArray(320)
             var length = 0
@@ -466,5 +498,68 @@ class RtcManager(val context:Context,private val rtcListener: RtcListener) {
             audioPlayer = null
         }
         thread.start()
+    }
+
+    fun deletePcm() {
+        val cacheDir: File = context.getExternalCacheDir()?:return
+        val finalFileDir = File(cacheDir.absolutePath + File.separator + "recorder")
+        val pcmFile = File(finalFileDir, pcmName)
+        pcmFile.delete()
+    }
+
+    fun uploadAndTalk(){
+        queryStatus({ b: Boolean ->
+                        if (b) {
+
+                        } else {
+
+                        }
+                    })
+    }
+
+    private val myVoiceId = "S_NOi0VPxE1"
+
+    private fun queryStatus(listener:(Boolean) -> Unit){
+        ApiInstance.queryVoiceTrainStatus(myVoiceId).enqueue(object : Callback<VoiceTrainStatusEntity?> {
+            override fun onResponse(call: Call<VoiceTrainStatusEntity?>, response: Response<VoiceTrainStatusEntity?>) {
+                if (response.body()?.content?.status == 2 || response.body()?.content?.status == 4) {
+                    //代表不需要训练了
+                    Toast.makeText(context, "不需要训练了", Toast.LENGTH_SHORT).show()
+                    //打开语音
+                } else {
+                    //还需要训练
+                    Toast.makeText(context, "还需要训练", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            override fun onFailure(call: Call<VoiceTrainStatusEntity?>, t: Throwable) {
+
+            }
+        })
+    }
+
+    private fun uploadWavFile(){
+        val cacheDir: File = context.getExternalCacheDir()?:return
+        val finalFileDir = File(cacheDir.absolutePath + File.separator + "recorder")
+        val wavFile = File(finalFileDir, "out_file.wav")
+
+        val requestFile = RequestBody.create("multipart/form-data".toMediaTypeOrNull(), wavFile)
+        // MultipartBody.Part  和后端约定好Key，这里的partName是用image
+        val body = MultipartBody.Part.createFormData("audio_bytes", wavFile.name, requestFile)
+
+        ApiInstance.postPcmFile("S_NOi0VPxE1",body).enqueue(object : Callback<CreateRoomEntity> {
+            override fun onResponse(call: Call<CreateRoomEntity>, response: Response<CreateRoomEntity>) {
+                if (response.body()?.error_code.equals("0000")) {
+
+                } else {
+                    Toast.makeText(context, "上传失败", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            override fun onFailure(call: Call<CreateRoomEntity>, t: Throwable) {
+                Toast.makeText(context, "上传失败", Toast.LENGTH_SHORT).show()
+                t.printStackTrace()
+            }
+        })
     }
 }
