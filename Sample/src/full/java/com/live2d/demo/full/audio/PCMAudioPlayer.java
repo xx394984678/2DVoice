@@ -6,7 +6,7 @@ import android.media.AudioTrack;
 
 public class PCMAudioPlayer {
     private AudioTrack audioTrack;
-    private int sampleRate = 16000; // 默认采样率
+    private int sampleRate = 32000; // 默认采样率
     private int channelConfig = AudioFormat.CHANNEL_OUT_MONO; // 默认立体声
     private int audioFormat = AudioFormat.ENCODING_PCM_16BIT; // 默认16位
     private int bufferSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat);
