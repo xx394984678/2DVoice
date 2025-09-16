@@ -98,4 +98,10 @@ dependencies {
     // OkHttp 是 Retrofit 的底层依赖，Retrofit 会自动引入，但如果你想配置 OkHttp（如添加拦截器），可以显式引入
     implementation 'com.squareup.okhttp3:okhttp:4.11.0'
     implementation 'com.squareup.okhttp3:logging-interceptor:4.11.0' // 网络请求日志拦截器，便于调试
+
+    // 流式请求
+    implementation 'com.squareup.okhttp3:okhttp-sse:3.12.13'
+    //火山引擎 流式语音识别 在线语音合成
+    implementation 'com.bytedance.speechengine:speechengine_tob:0.0.4'
+
 }

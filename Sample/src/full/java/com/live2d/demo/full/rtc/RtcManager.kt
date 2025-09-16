@@ -3,6 +3,7 @@ package com.live2d.demo.full.rtc
 import ai.guiji.duix.test.net.ApiInstance
 import android.Manifest
 import android.app.Activity
+import android.app.Application
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
@@ -11,10 +12,16 @@ import androidx.core.content.ContextCompat
 import com.google.gson.Gson
 import com.live2d.demo.full.audio.AudioPlayer
 import com.live2d.demo.full.audio.PCMAudioPlayer
+import com.live2d.demo.full.entity.ApiServerEntity
 import com.live2d.demo.full.entity.CreateRoomEntity
 import com.live2d.demo.full.entity.JoinRoom
 import com.live2d.demo.full.entity.SubtitleMsgData
 import com.live2d.demo.full.entity.SubtitleWrapEntity
+import com.live2d.demo.full.net.ApiSseRequest
+import com.live2d.demo.full.net.OnSseCallback
+import com.live2d.demo.full.net.SseRequest
+import com.live2d.demo.full.util.OnSpeechSynthesizerListener
+import com.live2d.demo.full.util.SpeechEngineTtsLocalManager
 import com.ss.bytertc.engine.IAudioFrameProcessor
 import com.ss.bytertc.engine.RTCRoom
 import com.ss.bytertc.engine.RTCRoomConfig
@@ -31,7 +38,10 @@ import com.ss.bytertc.engine.handler.IRTCRoomEventHandler
 import com.ss.bytertc.engine.handler.IRTCVideoEventHandler
 import com.ss.bytertc.engine.type.ChannelProfile
 import com.ss.bytertc.engine.type.MediaStreamType
+import com.ss.bytertc.engine.type.MessageConfig
 import com.ss.bytertc.engine.utils.IAudioFrame
+import org.json.JSONException
+import org.json.JSONObject
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -39,6 +49,8 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.nio.charset.StandardCharsets
 import kotlin.random.Random
 
 class RtcManager(val context:Context,private val rtcListener: RtcListener) {
@@ -111,6 +123,30 @@ class RtcManager(val context:Context,private val rtcListener: RtcListener) {
         // 开启音视频采集
         rtcVideo.startVideoCapture();
         rtcVideo.startAudioCapture();
+
+
+
+        speakManager = SpeechEngineTtsLocalManager()
+        speakManager?.initSDK(activity.application)
+        speakManager?.listener = object : OnSpeechSynthesizerListener{
+            override fun onSpeechStart(speechContent: String?) {
+            }
+
+            override fun onSpeechFinish(utteranceId: String?) {
+                //语音播报完成
+
+                if(isCollectFinish){
+                    sendLLMMessage("BotName001",apiResult.toString())
+                }
+
+            }
+
+            override fun onSpeechError() {
+            }
+
+        }
+
+
     }
     /**
      * 引擎回调信息
@@ -141,6 +177,13 @@ class RtcManager(val context:Context,private val rtcListener: RtcListener) {
     }
 
 
+
+    var rtcIsStart = false
+
+    var stringBuilder = StringBuilder()
+
+    var isAllSpeakEnd = false
+
     /**
      * 来源：根据 SubtitleMode 模式的不同，来源为 LLM 模块生成内容或 TTS 模块朗读内容。
      * 字幕返回方式 ：
@@ -161,6 +204,12 @@ class RtcManager(val context:Context,private val rtcListener: RtcListener) {
                 //字幕类型
                 val subtitleEntity = subtitleWrapEntity.data.get(0)
                 rtcListener.talkingText(subtitleEntity.text)
+
+
+                stringBuilder.append(subtitleEntity.text)
+
+
+
                 if (subtitleEntity.userId == userId) {
                     if (subtitleEntity.paragraph == true) {
                         //整句 结束
@@ -173,6 +222,12 @@ class RtcManager(val context:Context,private val rtcListener: RtcListener) {
                         //整句 结束
                         Log.d(TAG, "parseData: 结束push")
                         rtcListener.onStopTalk()
+
+                        if(isAutoSpeak){
+                            askQuestionToAI("111",stringBuilder.toString())
+                        }
+                        stringBuilder.clear()
+
                     } else {
                         Log.d(TAG, "parseData: ${subtitleEntity.text}")
                         rtcListener.onStartTalk()
@@ -467,4 +522,114 @@ class RtcManager(val context:Context,private val rtcListener: RtcListener) {
         }
         thread.start()
     }
+
+
+
+
+
+    fun speak(content : String){
+        speakManager?.addSpeakData(content)
+    }
+
+    var speakManager: SpeechEngineTtsLocalManager? = null
+
+
+    var apiResult = StringBuilder()
+
+    /** 是否收集完毕 **/
+    var isCollectFinish = false
+
+    /** 是否要托管播放 **/
+    var isAutoSpeak = false
+
+
+    /**
+     * 从孙博处获取到智能体对话的答案，自己将返回的结果播放出来
+     */
+    fun askQuestionToAI(sessionId: String, question: String) {
+        apiResult.clear()
+        isCollectFinish = false
+
+        val apiUrl = SseRequest.requestAiSendQuestion(question, sessionId)
+        ApiSseRequest.get(apiUrl,false, object : OnSseCallback {
+            override fun onSendSuccess() {
+                Log.d(TAG,"onSendSuccess")
+            }
+
+            override fun onEventSuccess(eventContent: ApiServerEntity?) {
+                //此处将返回的结果播放出来，并且将回答扔给智能体
+                if(eventContent != null){
+                    Log.d(TAG, "onEventSuccess    eventContent   --->${eventContent.message}")
+                    apiResult.append(eventContent.message)
+
+                    if(isAutoSpeak){
+                        speakManager?.addSpeakData(eventContent.message)
+                    }
+
+                    if(eventContent?.isMessage_end_status == true){
+                        //收集完毕后
+                        isCollectFinish = true
+                    }
+                }
+            }
+
+            override fun onFail(isClickRetry: Boolean) {
+                Log.d(TAG,"onFail")
+            }
+
+            override fun onOauthVerityFailed() {
+                Log.d(TAG,"onOauthVerityFailed")
+
+            }
+
+            override fun onCancel(isClickRetry: Boolean) {
+                Log.d(TAG,"onCancel")
+            }
+
+            override fun onClose() {
+                Log.d(TAG,"onClose")
+            }
+
+        })
+    }
+
+
+    // 传入大模型上下文信息
+    fun sendLLMMessage(userId: String?, content: String?) {
+        val json = JSONObject()
+        try {
+            json.put("Command", "ExternalTextToLLM")
+            json.put("Message", content)
+            json.put("InterruptMode", 1) // InterruptMode 可选值1,2,3
+        } catch (e: JSONException) {
+            throw RuntimeException(e)
+        }
+        val jsonString = json.toString()
+        val buildBinary = buildBinaryMessage("ctrl", jsonString)
+        sendUserBinaryMessage(userId, buildBinary)
+    }
+
+    private fun buildBinaryMessage(magic_number: String, content: String): ByteArray {
+        val prefixBytes = magic_number.toByteArray(StandardCharsets.UTF_8)
+        val contentBytes = content.toByteArray(StandardCharsets.UTF_8)
+        val contentLength = contentBytes.size
+
+        val buffer = ByteBuffer.allocate(prefixBytes.size + 4 + contentLength)
+        buffer.order(ByteOrder.BIG_ENDIAN)
+        buffer.put(prefixBytes)
+        buffer.putInt(contentLength)
+        buffer.put(contentBytes)
+        return buffer.array()
+    }
+
+    // userId 为房间内智能体的 ID（对应 StartVoiceChat 中的 AgentConfig.UserId）
+    fun sendUserBinaryMessage(userId: String?, buffer: ByteArray?) {
+        if (rtcRoom != null) {
+            rtcRoom.sendUserBinaryMessage(userId, buffer, MessageConfig.RELIABLE_ORDERED)
+        }
+    }
+
+
+
+
 }

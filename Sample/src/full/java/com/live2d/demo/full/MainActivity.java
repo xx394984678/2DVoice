@@ -98,6 +98,21 @@ public class MainActivity extends Activity {
         });
         linearLayout.addView(leaveRoom, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT));
 
+
+
+        Button autoSpeak = new Button(this);
+        autoSpeak.setText("托管");
+        autoSpeak.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                rtcManager.setAutoSpeak(true);
+            }
+        });
+        linearLayout.addView(autoSpeak, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT));
+
+
+
+
 //
 //        Button blinkBtn = new Button(this);
 //        blinkBtn.setText("眨眼");
@@ -197,6 +212,10 @@ public class MainActivity extends Activity {
         rtcManager.requestPermission(this);
         rtcManager.createRtc(this);
         rtcManager.createRoom();
+
+
+
+        rtcManager.speak("你好呀，第一次见面");
     }
 
     @Override

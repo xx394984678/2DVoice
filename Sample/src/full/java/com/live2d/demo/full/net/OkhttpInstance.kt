@@ -20,7 +20,10 @@ val ApiInstance = OkhttpInstance().instance
 class OkhttpInstance {
 
     // 基础 URL，通常以 / 结尾
-    private val BASE_URL = "https://dev-environmental.vcinema.cn:3093"
+    companion object {
+        const val BASE_URL = "https://dev-environmental.vcinema.cn:3093"
+    }
+
 
     // 惰性初始化 Retrofit 实例
     val instance: ApiServer by lazy {
@@ -100,7 +103,7 @@ class OkhttpInstance {
 
     }
 
-    private val client = OkHttpClient.Builder()
+    val client = OkHttpClient.Builder()
             .sslSocketFactory(getSslContext(myX509TrustManager).socketFactory, myX509TrustManager)
             .addInterceptor(HttpLoggingInterceptor(HttpLoggingInterceptor.Logger { message ->
                 Log.d("HttpLogDetail", message) }))
